@@ -1,0 +1,33 @@
+{
+	"security":{
+		"autoAccept":false,
+		"usePlatformTLS":false
+	},
+	"allow":[
+		"10.0.124.100",
+		"10.0.124.155",
+		"10.0.124.160",
+		"10.0.248.*"
+	],
+	"devices":[
+		{
+			"name":"VL6180",
+			"port":8082,
+			"values":["range"]
+		},
+		{
+			"name":"MPU9250",
+			"port":8084,
+			"values":["accely"]
+		}
+	]
+}
+
+
+
+
+
+
+
+
+
