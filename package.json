@@ -1,6 +1,6 @@
 {
   "name": "@agilatech/lynxari-wsfeed-application",
-  "version": "0.8.0",
+  "version": "1.0.0",
   "description": "Lynxari Server App for streaming sensor data on a websocket server",
   "main": "loader.js",
   "scripts": {
