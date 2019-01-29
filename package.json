@@ -1,21 +1,24 @@
 {
   "name": "@agilatech/lynxari-wsfeed-application",
-  "version": "0.6.0",
+  "version": "0.8.0",
   "description": "Lynxari Server App for streaming sensor data on a websocket server",
   "main": "loader.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: runs only within Lynxari\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "ssh://scott@209.200.216.6:22125/volume1/git_repos/lynxari-wsfeed-application"
+    "url": "git+https://github.com/Agilatech/lynxari-wsfeed-application"
   },
   "dependencies": {
     "websocket": "*"
   },
   "keywords": [
-    "websockets"
+    "websockets",
+    "websocket",
+    "agilatech",
+    "lynxari"
   ],
   "author": "scotty <scott@agilatech.com> (http://agilatech.com)",
-  "license": "SEE LICENSE IN LICENSE"
+  "license": "MIT"
 }

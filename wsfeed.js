@@ -1,16 +1,26 @@
-var http = require('http');
+
 const WebSocketServer = require('websocket').server;
 
 module.exports = class Wsfeed {
-	
 	constructor(server, security, allowed, device) {
 
     this.server = server;
     this.security = security;
     this.allowed = allowed;
     this.device = device;
+    this.protocol = 'wsfeed-protocol';
+
+    if (this.security.usePlatformTLS) {
+      this.createServer = require('https').createServer;
+      this.secure = true;
+    }
+    else {
+      this.createServer = require('http').createServer;
+      this.secure = false;
+    }
 
     this.connections = [];
+    this.connCount = 0;
 
     this.createHttpServer();
 
@@ -30,19 +40,19 @@ module.exports = class Wsfeed {
 
 			self.device.values.forEach(function(value, index) {
 
-		        dev.streams[value].on('data', function(message) {
-                    self.sendMessage(value, message.data, message.timestamp);
-                });
+		    dev.streams[value].on('data', function(message) {
+          self.sendMessage(value, message.data, message.timestamp);
+        });
 			});
 		});
 
 		this.server.observe([localDeviceQuery], function(dev) {
 
-		    self.device.values.forEach(function(value, index) {
+		  self.device.values.forEach(function(value, index) {
 
-		        dev.streams[value].on('data', function(message) {
-                    self.sendMessage(value, message.data, message.timestamp);
-                });
+		    dev.streams[value].on('data', function(message) {
+          self.sendMessage(value, message.data, message.timestamp);
+        });
 			});
 		});
 	}
@@ -56,48 +66,88 @@ module.exports = class Wsfeed {
   }
 
   createHttpServer() {
-    this.httpServer = http.createServer(function(request, response) {
+    var options = {};
+
+    if (this.secure) {
+      options.key = this.server.httpServer.server.key;
+      options.cert = this.server.httpServer.server.cert;
+      options.ca = this.server.httpServer.server.ca;
+    }
+
+    this.httpServer = this.createServer(options, (request, response) => {
       // shunt any http requests away
       response.writeHead(404);
       response.end();
+    }).on('clientError', (err) => {
+      this.server.error(`Wsfeed client: ${err}`);
+    }).on('error', (err) => {
+      this.server.error(`Wsfeed http server: ${err}`);
+    }).listen(this.device.port, () => {
+      const proto = (this.secure) ? 'wss' : 'ws';
+      this.server.info(`Wsfeed is ready to serve ${proto} stream for ${this.device.name} on port ${this.device.port}`);
     });
-
-    var self = this;
-    this.httpServer.listen(this.device.port, function() {
-      self.server.info('Wsfeed is ready to serve stream on port ' + self.device.port);
-    });
+ 
   }
 
   createWsServer() {
-    var self = this;
+
+    // Don't like this, but there doesn't seem a way to catch certain TLSWrap errors
+    process.on('uncaughtException', (err) => {
+      this.server.error(`Uncaught process exception: ${err}`);
+    });
 
     this.wsServer = new WebSocketServer({
       httpServer: this.httpServer,
       autoAcceptConnections: this.security.autoAccept
     });
 
-    this.wsServer.on('request', function(request) {
+    this.wsServer.on('error', (err) => {
+      this.server.error(`Wsfeed socket: ${err}`);
+    }).on('request', (request) => {
 
-      if (!self.originIsAllowed(request.remoteAddress)) {
+      request.on('error', (err) => {
+        this.server.error(`Wsfeed websocket: ${err}`);
+      });
+
+      if (!this.originIsAllowed(request.remoteAddress)) {
         request.reject(403, "Not explicitly allowed by platform configuration");
-        self.server.warn('Wsfeed connection from address ' + request.remoteAddress + ' rejected.');
+        this.server.warn('Wsfeed connection from address ' + request.remoteAddress + ' rejected.');
         return;
       }
     
-      var connection = request.accept('wsfeed-protocol', request.origin);
-      
-      self.server.info('Wsfeed connection accepted for ' + request.remoteAddress);
+      if (!this.protocolIsAllowed(request.requestedProtocols)) {
+        request.reject(412, "Protocol missing or unsupported");
+        this.server.warn('Wsfeed request from ' + request.remoteAddress + ' : improper protocol.');
+        return;
+      }
 
-      connection.on('close', function(reasonCode, description) {
-        self.server.info('Wsfeed peer ' + connection.remoteAddress + ' disconnected.');
-      });
+      try {
+        const connection = request.accept(this.protocol, request.origin);
 
-      // TODO: In theory, the connections array could grow uncontrollably and produce 
-      // a kind of memory leak if many connections are requested then closed.
-      // Think about providing a way to delete connections once they're closed
+        connection.on('error', (err) => {
+          this.server.error(`Wsfeed connection: ${err}`);
+        });
 
-      self.connections.push(connection);
+        this.connCount++;
+        connection.countID = this.connCount;
 
+        this.server.info('Wsfeed connection accepted for ' + request.remoteAddress);
+        
+        connection.on('close', (reasonCode, description) => {
+          // find and remove the connection from the connections array
+          this.connections.forEach((conn, index) => {
+            if (conn.countID == connection.countID) {
+              this.connections.splice(index, 1);
+            }
+          });
+          this.server.info('Wsfeed peer ' + connection.remoteAddress + ' disconnected.');
+        });
+
+        this.connections.push(connection);
+      }
+      catch (err) {
+        this.server.error(`Wsfeed connection: ${err}`);
+      }
     });
   }
 
@@ -107,16 +157,29 @@ module.exports = class Wsfeed {
     if (origin === '::1') {
       return true;
     }
-    
-    var allowable = false;
 
-    this.allowed.forEach(function(allow) {
+    var allowed = false;
+
+    this.allowed.forEach((allow) => {
       if (origin.match(allow)) {
-        allowable = true;
+        allowed = true;
       }
     });
 
-    return allowable;
+    return allowed;
+  }
+
+  protocolIsAllowed(protocols) {
+
+    var allowed = false;
+
+    protocols.forEach((protocol) => {
+      if (this.protocol.match(protocol)) {
+        allowed = true;
+      }
+    });
+
+    return allowed;
   }
 
 }

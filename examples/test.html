@@ -1,0 +1,49 @@
+<html lang="en-US">
+<meta charset="UTF-8">
+<head>
+  <title>Test</title>
+</head>
+<body>
+  <p id='test'>value here</p>
+</body>
+
+<script>
+  const message = document.getElementById('test');
+  const remoteAddr = 'localhost';
+  const remotePort = '8082';
+
+  // The websocket may either be secure or not, so we'll just try both and see which one works
+  const ws = new WebSocket(`ws://${remoteAddr}:${remotePort}`, 'wsfeed-protocol');
+  const wss = new WebSocket(`wss://${remoteAddr}:${remotePort}`, 'wsfeed-protocol');
+
+  ws.onmessage = function(evt) {
+    console.log(`Received new ws data ${evt.data}`);
+    const data = JSON.parse(evt.data);
+    message.innerHTML = data.value;
+  }
+
+  wss.onmessage = function(evt) {
+    console.log(`Received new wss data ${evt.data}`);
+    const data = JSON.parse(evt.data);
+    message.innerHTML = data.value;
+  }
+
+  ws.onopen = function() {
+    console.log('websocket ws connection opened');
+  }
+
+  wss.onopen = function() {
+    console.log('websocket wss connection opened');
+  }
+
+  ws.onerror = function (err) {
+    console.log(err);
+  }
+
+  wss.onerror = function (err) {
+    console.log(err);
+  }
+
+</script>
+
+</html>
